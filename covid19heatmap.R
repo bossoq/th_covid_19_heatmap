@@ -1,17 +1,14 @@
-## load library httr,jsonlite,dplyr,tidyr
+## load library httr,jsonlite,tidyverse,sf
+library(tidyverse)
 library(httr)
 library(jsonlite)
-library(dplyr)
-library(tidyr)
-library(ggplot2)
 library(sf)
-library(gridExtra)
-setwd(dir = "/workspaces/Covid") ## set your working dir
+setwd("/workspaces/Covid") ## set your working dir
 
 ## query api
 api_key <- "please input your api key"
 url <- paste0("https://opend.data.go.th/get-ckan/datastore_search?",
-              "resource_id=24ac8406-0cf9-4f8e-a55e-b53cf6766d1a")
+              "resource_id=329f684b-994d-476b-91a4-62b2ea00f29f")
 http_response <- GET(url, add_headers("api-key" = api_key), accept_json())
 total_data <- fromJSON(content(http_response, "text"))$result$total
 
@@ -30,6 +27,8 @@ while (offset_record <= max(total_data, 0)) {
     offset_record <- offset_record + 100
 }
 
+opencases <- as_tibble(opencases)
+
 ## Clean missing values
 ## missing province
 opencases$province_of_onset <- ifelse(opencases$province_of_onset == "",
@@ -43,22 +42,8 @@ opencases$province_of_onset <- ifelse(opencases$province_of_onset == "กทม.
                                       "กทม",
                                       opencases$province_of_onset)
 
-## missing date as of 2020-12-28
-## opencases$announce_date <- ifelse(is.na(opencases$announce_date),
-##                                  "2020-12-28T00:00:00",
-##                                  opencases$announce_date)
-
 ## sort opencases
-opencases <- opencases[order(opencases$no), ]
-
-## fixed missing date
-opencases$announce_date <- ifelse(opencases$no >= 4759 & opencases$no <= 4853,
-                                  "2020-12-28T00:00:00",
-                                  opencases$announce_date)
-opencases$announce_date <- ifelse(opencases$no == 4241 |
-                                  opencases$no == 4246,
-                                  "2020-12-23T00:00:00",
-                                  opencases$announce_date)
+opencases <- opencases[order(opencases["No."]), ]
 
 ## convert to date
 opencases$announce_date <- as.Date(opencases$announce_date) ## convert date
@@ -66,11 +51,11 @@ opencases$announce_date <- as.Date(opencases$announce_date) ## convert date
 ## filter out quarantine and ASQ
 opencases_local <- filter(opencases,
                           !grepl("State Quarantine",
-                                 quarantine) &
+                                 risk) &
                           !grepl("ASQ",
-                                 quarantine) &
+                                 risk) &
                           !grepl("HQ",
-                                 quarantine))
+                                 risk))
 
 ## create subset
 start_date <- as.Date("2020-12-18") ## first date of second wave
@@ -78,12 +63,12 @@ end_date <- Sys.Date()
 
 second_wave <- opencases_local[opencases_local$announce_date >= start_date &
                                opencases_local$announce_date <= end_date, ]
-second_wave <- second_wave[, -c(1, 6, 7)]
+second_wave <- second_wave[, -c(1, 4, 8)]
 
 
 ## number of secondWave by date
 the_date <- start_date
-temp_data <- second_wave[, 5:6]
+temp_data <- second_wave[, c(2, 6)]
 temp_prov <- NULL
 temp_name <- NULL
 while (the_date <= end_date) {
@@ -186,9 +171,6 @@ for (i in temp_name) {
                 na.value = "white",
                 midpoint = 50,
                 limits = c(floor(acc_range[1]), ceiling(acc_range[2]))) +
-##            scale_fill_gradient(high = "#ff5b5b",
-##                low = "#fdff90",
-##                na.value = "white") +
             labs(fill = "no. of cases")
 }
 
